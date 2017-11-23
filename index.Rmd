@@ -1,7 +1,7 @@
 ---
 title: "Practical Machine Learning Project"
 author: "zcao"
-date: "November 19, 2017"
+date: "November 14, 2017"
 output: html_document
 ---
 
@@ -9,22 +9,93 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+## Overview
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+This report is for class project of Practical Machine Learning using data set includes measurement from accelerometers on the belt, forrear, are and dumbbell of 6 subjects. The source of the data sets for this project are  https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv for training and 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv for testing. The goal of this project is to predict the manner in which they did the exercise and explore how well they do it. with variable "classe" in the training set.  In this report, it describes how model was built, how cross validation was used , what the expected out of sample error was, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+## Getting Data
+To read data to R, all "", NA and "#DIV/0!" will be viewed as NA.
 
-```{r cars}
-summary(cars)
+```{r echo=TRUE, cache=TRUE}
+set.seed(2899)
+if(!file.exists("./machinelearnig")) dir.create("./machinelearning1")
+trainold <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", na.strings = c("", "NA", "#DIV/0!"))
+testold <- read.csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", na.strings = c("", "NA", "#DIV/0!"))
 ```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Data Exploring
+To prepare for this project, pachages needed will be loaded to R first and then to explore the structur of the data
+```{r echo=TRUE,eval=TRUE, cache=TRUE}
+library(caret)
+library(randomForest)
+library(parallel)
+library(doParallel)
+dim(trainold)
+dim(testold)
 ```
+There are totally 160 variables in both training and testing data sets. To trim the data for the model building, all those columns with almost always NA and irrelevent to prediction will be revomed from the data set.
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Data Cleaning
+
+### Remove almost always NA Variables 
+```{r echo=TRUE,eval=TRUE, cache=TRUE}
+trainold <- trainold[, colSums(is.na(trainold))==0]
+testold <- testold[, colSums(is.na(testold))==0]
+dim(trainold)
+dim(testold)
+```
+After this procedure, 60 columns left in each data set. 
+
+### Remove Irrelevent columns
+This step will remove the first 7 columns of X, user_name, raw_timestamp_part_1, raw_timestamp_part_2,cvtd_timestamp, new_window and nmu_window.   
+
+```{r echo=TRUE,eval=TRUE, cache=TRUE}
+trainold <- trainold[, -(1:7)]
+testold <- testold[, -(1:7)]
+dim(trainold)
+dim(testold)
+```
+At this time point, only 53 columns are included in both training and testing data sets. Therefore, there will 53 predictors to build machine learning model. 
+
+## Data Preparing
+For cross validation purpose, the training data will be split into two smaller datasets as trainnew1 and trainnew2.
+
+```{r echo=TRUE,eval=TRUE, cache=TRUE}
+set.seed(2899)
+inTrain <- createDataPartition(y=trainold$classe, p=0.7, list=FALSE)
+trainnew1 <- trainold[inTrain, ]
+trainnew2 <- trainold[-inTrain, ]
+dim(trainnew1)
+dim(trainnew2)
+```
+## Model Building
+The prediction model build  by Random Forest algorithm along with 5 -fold cross validation as the algorithm is applying. 
+
+```{r echo=TRUE,eval=TRUE, cache=TRUE}
+set.seed(2899)
+controlrf <- trainControl(method="cv", 5)
+modelfit <- train(classe ~., data=trainnew1, method = "rf", trControl= controlrf, importance=TRUE, ntree=100)
+ modelfit
+```
+## Model Validation
+To evaluate the model built, the model will be applied to the data of trainnew2 through confusion Matrix function.
+```{r echo=TRUE,eval=TRUE, cache=TRUE}
+modelfitpred <- predict(modelfit, trainnew2)
+confusionMatrix(trainnew2$classe, modelfitpred)
+accuracy <- postResample(modelfitpred, trainnew2$classe)
+accuracy
+```
+The estimated accuracy is 99.3%. Thus, the error can be calculated as following: 
+```{r echo=TRUE,eval=TRUE, cache=TRUE}
+error <- 1- as.numeric(confusionMatrix(trainnew2$classe, modelfitpred)$overall[1])
+error
+```
+The result shows that the estimated out-of-sample  error is 0.697%. This indicates that the machine learning model set up by RandomForest is good enough to predict the testing data set--testold. 
+
+## Test Data Predicting
+```{r echo=TRUE,eval=FALSE, cache=TRUE}
+finaltest <- predict(modelfit, testold)
+finaltest
+```
+## Conclusion
+The finaltest results answered 20 quiz questions correctly. In turn, it proved that randomForest algoritham plus cross-validation process builts an accurate pradiction model 
